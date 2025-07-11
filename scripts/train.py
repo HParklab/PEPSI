@@ -4,24 +4,16 @@ from torch.utils import data
 src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'))
 sys.path.append(src_dir)
 from dataset import DataSet, collate
-from util.arguments import set_arguments
+from arguments import set_arguments
 from util.diffusion import Diffusion
 from util.training_utils import *
-from models.egnn import EGNN
+from models.egnn_jsi import EGNN
 from util.lr_scheduler import *
 
 
 
 def main():
-    
-    # model_params = {
-    #             'in_node_nf': 11,
-    #             'hidden_nf': 160,
-    #             'out_node_nf': 11,
-    #             'in_edge_nf': 3,
-    #             'device': torch.device('cuda'),
-    #             'n_layers': 8
-    #             }
+
     model_params = {
                 'in_node_nf': 11,
                 'hidden_nf': 160,
@@ -59,37 +51,23 @@ def main():
     
     model, optimizer, start_epoch, train_loss, valid_loss = load_model(EGNN, model_params, args=set_arguments())
 
-    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda_x0pdl2, last_epoch=start_epoch-1)
     noiser = Diffusion
 
     for epoch in range(start_epoch, args.MAXEPOCHS):
-        # print(f"Epoch {epoch}, current LR: {scheduler.get_last_lr()[0]:.6f}")
         # training
         start_time = time.time()
-        temp_loss = run_an_epoch_x0pdl(model,optimizer,train_loader,noiser,True,args=set_arguments())
+        temp_loss = run_an_epoch(model,optimizer,train_loader,noiser,True,args=set_arguments())
         
         for key in temp_loss:
             train_loss[key].append(temp_loss[key])
         # validation
         with torch.no_grad():
-            temp_loss = run_an_epoch_x0pdl(model,optimizer,valid_loader,noiser,False,args=set_arguments())
+            temp_loss = run_an_epoch(model,optimizer,valid_loader,noiser,False,args=set_arguments())
             for key in temp_loss:
                 valid_loss[key].append(temp_loss[key])
-        # scheduler.step()
 
         end_time = time.time()
         ttime = end_time - start_time
-        # print(
-        #     "Epoch %d, t: %d, "
-        #     "Train Loss : TL %7.4f | "
-        #     "Valid Loss : TL %7.4f "
-        #     % (
-        #         epoch,
-        #         int(ttime),
-        #         np.mean(train_loss['total'][-1]),
-        #         np.mean(valid_loss['total'][-1])
-        #     )
-        # )
         print(
             "Epoch %d, t: %d, "
             "Train Loss : TL %7.4f L1 %7.4f L2 %7.4f | "
@@ -105,40 +83,6 @@ def main():
                 np.mean(valid_loss['loss2'][-1])
             )
         )
-        # print(
-        #     "t: %d, "
-        #     "Train Loss : TL %7.4f L1 %7.4f L2 %7.4f L3 %7.4f | "
-        #     "Valid Loss : TL %7.4f L1 %7.4f L2 %7.4f L3 %7.4f "
-        #     % (
-        #         int(ttime),
-        #         np.mean(train_loss['total'][-1]),
-        #         np.mean(train_loss['loss1'][-1]),
-        #         np.mean(train_loss['loss2'][-1]),
-        #         np.mean(train_loss['loss3'][-1]),
-        #         np.mean(valid_loss['total'][-1]),
-        #         np.mean(valid_loss['loss1'][-1]),
-        #         np.mean(valid_loss['loss2'][-1]),
-        #         np.mean(valid_loss['loss3'][-1])
-        #     )
-        # )
-        # print(
-        #     "t: %d, "
-        #     "Train Loss : TL %7.4f L1 %7.4f L2 %7.4f L3 %7.4f L4 %7.4f | "
-        #     "Valid Loss : TL %7.4f L1 %7.4f L2 %7.4f L3 %7.4f L4 %7.4f "
-        #     % (
-        #         int(ttime),
-        #         np.mean(train_loss['total'][-1]),
-        #         np.mean(train_loss['loss1'][-1]),
-        #         np.mean(train_loss['loss2'][-1]),
-        #         np.mean(train_loss['loss3'][-1]),
-        #         np.mean(train_loss['loss4'][-1]),
-        #         np.mean(valid_loss['total'][-1]),
-        #         np.mean(valid_loss['loss1'][-1]),
-        #         np.mean(valid_loss['loss2'][-1]),
-        #         np.mean(valid_loss['loss3'][-1]),
-        #         np.mean(valid_loss['loss4'][-1])
-        #     )
-        # )
         
         save_model(epoch, model, optimizer, train_loss, valid_loss, args=set_arguments())
         
