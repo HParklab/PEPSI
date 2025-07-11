@@ -3,24 +3,14 @@ import numpy as np
 from torch import Tensor
 from typing import List, Dict, Tuple
 import os
-# from Bio.PDB import PDBParser, PDBIO
-from torch_geometric.data import Data
-from util.utils import com2zero_np, find_dist_neighbors, batch_com
 from util.training_utils import dist_edges
 from util.pdb_parsing import *
 from util.diffusion import Diffusion
-from models.egnn import EGNN
+from models.egnn_jsi import EGNN
 
 
 def load_best_model(model_class, model_params:Dict, args, message=None):
-    """
-    전체 epoch 중 validation loss가 가장 낮은 epoch의 model parameter를 불러오는 함수
     
-    Args:
-        model_class (class): 사용하는 모델이 정의된 class
-        model_params (Dict): model hyper-parameter
-        args (fuction): model_name, model weights가 저장된 directory path, device parsed
-    """
     model_name = args.model_name
     model_path = args.model_path
     device = args.device
@@ -40,8 +30,6 @@ def load_best_model(model_class, model_params:Dict, args, message=None):
         print(f"there's no {model_name}")
         
         return
-    
-
 
 class sampling_code: 
 
@@ -103,7 +91,7 @@ class sampling_code:
 
         return G,com
 
-    def sample_pdb(self, sample_pdb=None):
+    def sample_pdb(self, traj=True, sample_pdb=None):
 
         G = self.G
         ddpm = Diffusion(self.device, self.T, self.G)
@@ -132,89 +120,60 @@ class sampling_code:
 
             atom_types = torch.argmax(G.node_attr[G.pepidx, 5:7], dim=1)
             
-            sample2pdb_traj(self.sample_path, "sample_traj.pdb", atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx, self.T-t)
-            
+            if traj:
+                self.sample2pdb_traj(self.sample_path, "sample_traj.pdb", atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx, self.T-t)
             if t == 0:
                 if sample_pdb == None:
-                    sample2pdb(self.sample_path, 'sample.pdb', atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
-
-        return x_t1
-    
-    def sample_pdb_ep(self, traj=False, sample_pdb=None):
-
-        G = self.G
-        ddpm = Diffusion(self.device, self.T, self.G)
-        
-        for t in reversed(range(self.T)): 
-
-            base = ddpm.time_embedding(self.t_dim, t)
-            G.node_attr = torch.cat([G.node_attr, base], dim=1)
-
-            x_tu = G.node_xyz.clone()
-            x_td = G.node_xyz[G.pepidx].clone()
-            with torch.no_grad(): 
-                _,pred_ep = self.model(G.node_attr, G.node_xyz, G.edge_index, G.edge_attr)
-            x_t1 = ddpm.reverse_process_ep(x_td, pred_ep, t)
-
-            G.node_xyz = x_tu 
-            G.node_xyz[G.pepidx] = x_t1
-            G.node_attr = G.node_attr[:, :G.node_attr.shape[-1]-self.t_dim]
-            G.edge_attr = G.edge_attr[:,1:]
-            G = dist_edges(G)
-
-            atom_types = torch.argmax(G.node_attr[G.pepidx, 5:7], dim=1)
-            sample2pdb_traj(self.sample_path, "sample_traj.pdb", atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx, self.T-t)
-            
-            if t == 0:
-                if sample_pdb == None:
-                    sample2pdb(self.sample_path, 'sample.pdb', atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
+                    self.sample2pdb(self.sample_path, 'sample.pdb', atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
+                else: 
+                    self.sample2pdb(self.sample_path, sample_pdb, atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
 
         return x_t1
                 
-def sample2pdb(path, pdb_file, atom_types, seqidx, xyz_coord, com, pepidx, connect=True):
+    def sample2pdb(self, path, pdb_file, atom_types, seqidx, xyz_coord, com, pepidx, connect=True):
 
-    pdb_file = path + pdb_file
+        pdb_file = path + pdb_file
 
-    with open(pdb_file, 'w') as f:
-        for i in range(len(pepidx)):
-            chainID = 'X' 
+        with open(pdb_file, 'w') as f:
+            for i in range(len(pepidx)):
+                chainID = 'X' 
 
-            atom_idx = atom_types[i].item()
-            seq_idx = int(seqidx[i].item()) + 1
-            xyz = (xyz_coord[i] + com.to(device=xyz_coord.device)).squeeze(0)
-            x, y, z = xyz.tolist()
+                atom_idx = atom_types[i].item()
+                seq_idx = int(seqidx[i].item()) + 1
+                xyz = (xyz_coord[i] + com.to(device=xyz_coord.device)).squeeze(0)
+                x, y, z = xyz.tolist()
 
-            if atom_idx == 0:
-                f.write(f"ATOM  {i+1:5d}  CA  UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           C\n")
-            elif atom_idx == 1:
-                f.write(f"ATOM  {i+1:5d}  CB  UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           C\n")
-        
-        if connect:
-            CA_idx = list(range(1, i, 2))
-            for i in range(len(CA_idx)):
-                a1 = CA_idx[i]
-                a2 = CA_idx[i] + 2
-                f.write(f"CONECT{a1:5d}{a2:5d}\n")
+                if atom_idx == 0:
+                    f.write(f"ATOM  {i+1:5d}  CA  UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           C\n")
+                elif atom_idx == 1:
+                    f.write(f"ATOM  {i+1:5d}  CB  UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           C\n")
+            
+            if connect:
+                CA_idx = list(range(1, i, 2))
+                for i in range(len(CA_idx)):
+                    a1 = CA_idx[i]
+                    a2 = CA_idx[i] + 2
+                    f.write(f"CONECT{a1:5d}{a2:5d}\n")
 
-def sample2pdb_traj(path, pdb_file, atom_types, seqidx, xyz_coord, com, pepidx, model_num):
+    def sample2pdb_traj(self, path, pdb_file, atom_types, seqidx, xyz_coord, com, pepidx, model_num):
 
-    pdb_file = path + pdb_file
+        pdb_file = path + pdb_file
 
-    with open(pdb_file, 'a') as f:
-        f.write(f"MODEL     {model_num+1:>4}\n")
-        for i in range(len(pepidx)):
-            chainID = 'X' 
+        with open(pdb_file, 'a') as f:
+            f.write(f"MODEL     {model_num+1:>4}\n")
+            for i in range(len(pepidx)):
+                chainID = 'X' 
 
-            atom_idx = atom_types[i].item()
-            seq_idx = int(seqidx[i].item()) + 1
-            xyz = (xyz_coord[i] + com.to(device=xyz_coord.device)).squeeze(0)
-            x, y, z = xyz.tolist()
+                atom_idx = atom_types[i].item()
+                seq_idx = int(seqidx[i].item()) + 1
+                xyz = (xyz_coord[i] + com.to(device=xyz_coord.device)).squeeze(0)
+                x, y, z = xyz.tolist()
 
-            if atom_idx == 0:
-                f.write(f"ATOM  {i+1:5d}  H   UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           H\n")
-            elif atom_idx == 1:
-                f.write(f"ATOM  {i+1:5d}  H   UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           H\n")
-        f.write("ENDMDL\n")
+                if atom_idx == 0:
+                    f.write(f"ATOM  {i+1:5d}  H   UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           H\n")
+                elif atom_idx == 1:
+                    f.write(f"ATOM  {i+1:5d}  H   UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           H\n")
+            f.write("ENDMDL\n")
 
 def get_coarse_length(x0):
 
@@ -244,7 +203,6 @@ def get_coarse_interaction(x, idx):
     minCA_dist = torch.mean(torch.min(dist_map, dim=1)[0])
 
     return num_interaction, minCA_dist
-
 
 def pdb_to_all_coords_tensor(pdb_path):
 
