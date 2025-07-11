@@ -9,18 +9,7 @@ import torch.nn.functional as F
 
 
 def load_model(model_class, model_params:Dict, args):
-    """
-    model parameter를 불러오는 함수
-    
-    Args:
-        model_name (str): model weights가 저장된 directory명
-        model_class (class): 사용하는 모델이 정의된 class
-        model_params (Dict): model hyper-parameter
-        args (fuction): model_name, model weights가 저장된 directory path, learning rate, device parsed
-    
-    Returns:
-        model, optimizer, epoch, trainloss, validloss
-    """
+   
     model_name = args.model_name
     model_path = args.model_path
     lr = args.lr 
@@ -55,21 +44,7 @@ def load_model(model_class, model_params:Dict, args):
 
 
 def run_an_epoch(model,optimizer,loader,noiser,train:bool,args) -> List:
-    """
-    training, validation 1 epoch 진행
-    for DDPM
-    
-    Args:
-        model : 사용하는 모델
-        optimizer : optimizer
-        loader : dataloader
-        noiser (class): Diffusion
-        train (bool): True of False
-        args (function): t_dim(time embedding dimension) parsed
-    
-    Returns:
-        List : temp_loss 
-    """
+
     temp_loss = {'total':[], 'loss1':[], 'loss2':[]}
     model = model.to(args.device)
     
@@ -131,20 +106,7 @@ def run_an_epoch(model,optimizer,loader,noiser,train:bool,args) -> List:
 
 
 def save_model(epoch:int, model, optimizer, train_loss, valid_loss, args) -> None:
-    """
-    model을 현재 epoch에 대해 model.pkl에 save, best model이라면 best.pkl에 save
-    
-    Args:
-        epoch (int): 현재 epoch
-        model : 사용한 model
-        optimizer : optimizer
-        train_loss : train loss
-        valid_loss : validation loss
-        args : model_path, model_name parsed
-    
-    Returns:
-        
-    """
+    "
     # Update the best model if necessary:
     if np.min([np.mean(vl) for vl in valid_loss["total"]]) == np.mean(valid_loss["total"][-1]):
         torch.save({
