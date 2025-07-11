@@ -2,9 +2,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor, LongTensor
 from typing import List, Tuple
-import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 class E_GCL(nn.Module):
     """
@@ -19,50 +17,57 @@ class E_GCL(nn.Module):
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d = 0, 
                  act_fn = nn.SiLU(), residual = True, 
                  attention = False, normalize = False, 
-                 coords_agg = 'mean', tanh = False):
+                 coords_agg = 'mean', tanh = False, norm_during_mlp = False,
+                 node_agg = 'mean'):
         super(E_GCL, self).__init__()
         input_edge = input_nf * 2
         self.residual = residual
         self.attention = attention
         self.normalize = normalize
         self.coords_agg = coords_agg
+        self.node_agg = node_agg
         self.tanh = tanh
         self.epsilon = 1e-8
         edge_coords_nf = 1
 
-        self.edge_mlp = nn.Sequential(
-            nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
-            act_fn,
-            nn.Linear(hidden_nf, hidden_nf*2),
-            act_fn,
-            nn.Linear(hidden_nf*2, hidden_nf*4),
-            act_fn,
-            nn.Linear(hidden_nf*4, hidden_nf),
-            act_fn)
+        normlayer = nn.LayerNorm(hidden_nf, elementwise_affine=False)
+        
+        if norm_during_mlp:
+            self.edge_mlp = nn.Sequential(
+                nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
+                normlayer,
+                act_fn,
+                nn.Linear(hidden_nf, hidden_nf),
+                normlayer,
+                act_fn)
+        else:
+            self.edge_mlp = nn.Sequential(
+                nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
+                act_fn,
+                nn.Linear(hidden_nf, hidden_nf),
+                act_fn)
 
-        self.node_mlp = nn.Sequential(
-            nn.Linear(hidden_nf + input_nf, hidden_nf),
-            act_fn,
-            nn.Linear(hidden_nf, hidden_nf*2),
-            act_fn,
-            nn.Linear(hidden_nf*2, hidden_nf*4),
-            act_fn,
-            nn.Linear(hidden_nf*4, hidden_nf),
-            act_fn,
-            nn.Linear(hidden_nf, output_nf))
+        if norm_during_mlp:
+            self.node_mlp = nn.Sequential(
+                nn.Linear(hidden_nf + input_nf, hidden_nf),
+                normlayer,
+                act_fn,
+                nn.Linear(hidden_nf, output_nf),
+                normlayer)
+
+        else:
+            self.node_mlp = nn.Sequential(
+                nn.Linear(hidden_nf + input_nf, hidden_nf),
+                act_fn,
+                nn.Linear(hidden_nf, output_nf))
 
         layer = nn.Linear(hidden_nf, 1, bias=False)
         torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
 
         coord_mlp = []
-        coord_mlp.append(nn.Linear(hidden_nf, hidden_nf*2))
-        coord_mlp.append(act_fn)
-        coord_mlp.append(nn.Linear(hidden_nf*2, hidden_nf*4))
-        coord_mlp.append(act_fn)
-        coord_mlp.append(nn.Linear(hidden_nf*4, hidden_nf))
+        coord_mlp.append(nn.Linear(hidden_nf, hidden_nf))
         coord_mlp.append(act_fn)
         coord_mlp.append(layer)
-
         if self.tanh:
             coord_mlp.append(nn.Tanh())
         self.coord_mlp = nn.Sequential(*coord_mlp)
@@ -78,17 +83,21 @@ class E_GCL(nn.Module):
             out = torch.cat([source, target, radial], dim=1)
         else:
             out = torch.cat([source, target, radial, edge_attr], dim=1)
-        out = self.edge_mlp(out.float())
-        
+        out = self.edge_mlp(out)
         if self.attention:
             att_val = self.att_mlp(out)
             out = out * att_val
-        
         return out
 
-    def node_model(self, x: Tensor, edge_index: List[LongTensor], edge_attr: Tensor, node_attr: Tensor):
+    def node_model(self, x: Tensor, edge_index: List[LongTensor], edge_attr: Tensor, node_attr: Tensor, pool='sum'):
         row, col = edge_index
-        agg = E_GCL.unsorted_segment_sum(edge_attr, row, num_segments=x.size(0))
+        if pool == 'mean':
+            agg = E_GCL.unsorted_segment_mean(edge_attr, row, num_segments=x.size(0))
+        elif pool == 'sum':
+            agg = E_GCL.unsorted_segment_sum(edge_attr, row, num_segments=x.size(0))
+        else:
+            raise Exception('Wrong node_agg parameter' % pool)
+            
         if node_attr is not None:
             agg = torch.cat([x, agg, node_attr], dim=1)
         else:
@@ -103,11 +112,8 @@ class E_GCL(nn.Module):
         Update coordinates (equation 4 in the paper). edge_feat is message between the nodes.
         """
         row, col = edge_index
-        row = row.clone().detach().to(device)
-        col = col.clone().detach().to(device)
         trans = coord_diff * self.coord_mlp(edge_feat)
-        trans = torch.clamp(trans, min=-100, max=100) 
-        #This is never activated but just in case it case it explosed it may save the train
+        trans = torch.clamp(trans, min=-100, max=100) #This is never activated but just in case it case it explosed it may save the train
         if self.coords_agg == 'sum':
             agg = E_GCL.unsorted_segment_sum(trans, row, num_segments=coord.size(0))
         elif self.coords_agg == 'mean':
@@ -115,7 +121,6 @@ class E_GCL(nn.Module):
         else:
             raise Exception('Wrong coords_agg parameter' % self.coords_agg)
         coord += agg
-        
         return coord
 
     def coord2radial(self, edge_index: List[LongTensor], coord: Tensor) -> Tuple[Tensor, Tensor]:
@@ -126,8 +131,7 @@ class E_GCL(nn.Module):
         """
         row, col = edge_index
         coord_diff = coord[row] - coord[col]
-        radial = torch.sum(coord_diff**2, 1)
-        radial = torch.unsqueeze(radial, dim=1)
+        radial = torch.sum(coord_diff**2, 1).unsqueeze(1)
 
         if self.normalize:
             norm = torch.sqrt(radial).detach() + self.epsilon
@@ -136,7 +140,7 @@ class E_GCL(nn.Module):
         return radial, coord_diff
     
     @staticmethod
-    def unsorted_segment_sum(data: Tensor, segment_ids: LongTensor, num_segments: int): 
+    def unsorted_segment_sum(data: Tensor, segment_ids: LongTensor, num_segments: int):
         result_shape = (num_segments, data.size(1))
         result = data.new_full(result_shape, 0)  # Init empty result tensor.
         segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
@@ -156,21 +160,15 @@ class E_GCL(nn.Module):
     def forward(self, 
                 h: Tensor, 
                 edge_index: List[LongTensor], 
-                coord: Tensor,
+                coord: Tensor, 
                 edge_attr: Tensor = None, 
                 node_attr: Tensor = None):
-        #print(edge_index.shape)
-
         row, col = edge_index
         radial, coord_diff = self.coord2radial(edge_index, coord)
-        #print('hrow: ', h[row].shape)
-        #print('hcol: ', h[col].shape)
-        #print('radial: ', radial.shape)
-        #print('edge_attr: ', edge_attr.shape)
+
         edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
-        #print(coord.shape)
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
-        h, agg = self.node_model(h, edge_index, edge_feat, node_attr)
+        h, agg = self.node_model(h, edge_index, edge_feat, node_attr, pool=self.node_agg)
     
         return h, coord, edge_attr
 
@@ -199,7 +197,8 @@ class EGNN(nn.Module):
     def __init__(self, in_node_nf, hidden_nf, out_node_nf, in_edge_nf = 0, 
                  device = 'cpu', act_fn = nn.SiLU(), 
                  n_layers = 4, residual = True, attention = False, 
-                 normalize = False, tanh = False):
+                 normalize = False, tanh = False,
+                 norm_during_mlp = False, node_agg = False):
         super(EGNN, self).__init__()
         self.hidden_nf = hidden_nf
         self.device = device
@@ -209,7 +208,8 @@ class EGNN(nn.Module):
         for i in range(0, n_layers):
             self.add_module("gcl_%d" % i, E_GCL(self.hidden_nf, self.hidden_nf, self.hidden_nf, edges_in_d=in_edge_nf,
                                                 act_fn=act_fn, residual=residual, attention=attention,
-                                                normalize=normalize, tanh=tanh))
+                                                normalize=normalize, tanh=tanh,
+                                                norm_during_mlp=norm_during_mlp, node_agg=node_agg))
         self.to(self.device)
 
     def forward(self, 
@@ -217,7 +217,6 @@ class EGNN(nn.Module):
                 x: Tensor, 
                 edges: List[LongTensor], 
                 edge_attr: Tensor) -> Tuple[Tensor, Tensor]:
-        #print(x.shape)
         h = self.embedding_in(h)
         for i in range(0, self.n_layers):
             h, x, _ = self._modules["gcl_%d" % i](h, edges, x, edge_attr=edge_attr)
