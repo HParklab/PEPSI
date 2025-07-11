@@ -10,7 +10,7 @@ from models.egnn_jsi import EGNN
 
 
 def load_best_model(model_class, model_params:Dict, args, message=None):
-    
+
     model_name = args.model_name
     model_path = args.model_path
     device = args.device
@@ -33,19 +33,13 @@ def load_best_model(model_class, model_params:Dict, args, message=None):
 
 class sampling_code: 
 
-    def __init__(self, args, model_params, pdb_path, pdbnum, mode):
+    def __init__(self, args, model_params, pdb_path):
 
-        self.T = args.timestep
-        self.device = args.device
+        self.args = args
+        self.model_params = model_params
         self.pdb_path = pdb_path
-        G, com = self.preset(pdbnum, mode)
-        self.G = G.clone()
-        self.com = com.clone()
-        self.t_dim = args.t_dim
-        self.model = load_best_model(EGNN, model_params, args)
-        self.sample_path = args.sample_path
 
-    def preset(self, pdbnum, mode):
+    def preset(self, pdbnum):
 
         if type(pdbnum) == int:
                 pdbs = os.listdir(self.pdb_path)
@@ -54,81 +48,62 @@ class sampling_code:
         elif type(pdbnum) == str: 
             pdb = self.pdb_path + pdbnum
 
-        if mode == 'make_graph':
-            to_graph = coarse_graph_maker(pdb)
-            print('peplen: ', to_graph.peplen)
-            G, com = to_graph.make_graph(25.0,1)
-            self.to_graph = to_graph
+        to_graph = coarse_graph_maker(pdb)
+        G, com = to_graph.make_graph(25.0)
+        self.to_graph = to_graph
 
-            xyz = G.node_xyz.clone()*0.1 
-            ep = torch.randn_like(xyz[G.pepidx])
-            ep = ep - torch.mean(ep, dim=0, keepdim=True)
-            xyz[G.pepidx] = ep 
-            G.node_xyz = xyz 
-            G.node_attr = G.node_attr[:,[0,5,6]]
-        elif mode == 'make_graph2': 
-            to_graph = coarse_graph_maker(pdb)
-            G, com = to_graph.make_graph2(25.0,10)
-            self.to_graph = to_graph
+        xyz = G.node_xyz.clone()
+        ep = torch.randn_like(xyz[G.pepidx])
+        ep = ep - torch.mean(ep, dim=0, keepdim=True)
+        xyz[G.pepidx] = ep 
+        G.node_xyz = xyz 
 
-            xyz = G.node_xyz.clone()
-            ep = torch.randn_like(xyz[G.pepidx])
-            ep = ep - torch.mean(ep, dim=0, keepdim=True)
-            xyz[G.pepidx] = ep 
-            G.node_xyz = xyz 
-        elif mode == 'make_graph3': 
-            to_graph = coarse_graph_maker(pdb)
-            G, com = to_graph.make_graph3(25.0)
-            self.to_graph = to_graph
-
-            xyz = G.node_xyz.clone()
-            ep = torch.randn_like(xyz[G.pepidx])
-            ep = ep - torch.mean(ep, dim=0, keepdim=True)
-            xyz[G.pepidx] = ep 
-            G.node_xyz = xyz 
-
-        G = dist_edges(G).to(self.device)
+        G = dist_edges(G).to(self.args.device)
 
         return G,com
 
-    def sample_pdb(self, traj=True, sample_pdb=None):
+    def sample_pdb(self, pdbnum, traj=True, sample_pdb=None):
+
+        G,_ = self.preset(pdbnum)
+        model = load_best_model(EGNN, self.model_params, self.args)
 
         G = self.G
-        ddpm = Diffusion(self.device, self.T, self.G)
+        ddpm = Diffusion(self.args.device, self.args.timestep, self.G)
         
-        for t in reversed(range(self.T)): 
+        for t in reversed(range(self.args.timestep)): 
 
-            base = ddpm.time_embedding(self.t_dim, t)
+            base = ddpm.time_embedding(self.args.t_dim, t)
             G.node_attr = torch.cat([G.node_attr, base], dim=1)
 
             x_tu = G.node_xyz.clone()
             x_td = G.node_xyz[G.pepidx].clone()
 
             with torch.no_grad(): 
-                _,x0 = self.model(G.node_attr, G.node_xyz, G.edge_index, G.edge_attr)
+                _,x0 = model(G.node_attr, G.node_xyz, G.edge_index, G.edge_attr)
             x0_target = x0[G.pepidx]
             x0_target = x0_target - torch.mean(x0_target, dim=0, keepdim=True)
 
-            x_t1 = ddpm.reverse_process_on_x(x_td, x0_target, t)
+            x_t1 = ddpm.reverse_process(x_td, x0_target, t)
 
             G.node_xyz = x_tu 
             G.node_xyz[G.pepidx] = x_t1 
 
-            G.node_attr = G.node_attr[:, :G.node_attr.shape[-1]-self.t_dim]
+            G.node_attr = G.node_attr[:, :G.node_attr.shape[-1]-self.args.t_dim]
             G.edge_attr = G.edge_attr[:,1:]
             G = dist_edges(G)
 
             atom_types = torch.argmax(G.node_attr[G.pepidx, 5:7], dim=1)
             
             if traj:
-                self.sample2pdb_traj(self.sample_path, "sample_traj.pdb", atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx, self.T-t)
+                self.sample2pdb_traj(self.args.sample_path, "sample_traj.pdb", atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx, self.args.timestep-t)
             if t == 0:
                 if sample_pdb == None:
-                    self.sample2pdb(self.sample_path, 'sample.pdb', atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
+                    self.sample2pdb(self.args.sample_path, 'sample.pdb', atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
                 else: 
-                    self.sample2pdb(self.sample_path, sample_pdb, atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
+                    self.sample2pdb(self.args.sample_path, sample_pdb, atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
 
         return x_t1
+    
                 
     def sample2pdb(self, path, pdb_file, atom_types, seqidx, xyz_coord, com, pepidx, connect=True):
 
@@ -174,6 +149,7 @@ class sampling_code:
                 elif atom_idx == 1:
                     f.write(f"ATOM  {i+1:5d}  H   UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           H\n")
             f.write("ENDMDL\n")
+
 
 def get_coarse_length(x0):
 
