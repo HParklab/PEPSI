@@ -7,10 +7,7 @@ import tqdm
 import numpy as np
 
 class Diffusion:
-    """
-    DDPM의 foward process, reverse process에 필요한 class
 
-    """
     def __init__(self, device:str, T:int, G) -> None:
         """
         initializing Diffusion
