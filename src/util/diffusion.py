@@ -1,115 +1,65 @@
 import torch
-from util.utils import *
 from torch import Tensor
 from typing import Tuple, List
-import torch.nn.functional as F
-import tqdm
 import numpy as np
+import math
 
 class Diffusion:
 
     def __init__(self, device:str, T:int, G) -> None:
-        """
-        initializing Diffusion
-
-        Args:
-            device (str): device
-            T (int): max timestep
-            G (graph): graph
-        """
+        
         self.device = device
         self.T = T
-        self.graph = G.to(device)
-        self.pepidx = G.pepidx
-        # self.target_idx = G.target_idx
+        self.G = G.to(device)
 
-        self.betas = cos_scheduling(T)
-        self.alphas = 1 - self.betas
-        self.alpha_bars_xyz = torch.cumprod(1-self.betas, dim=0).to(device)
+        betas = self.cos_scheduling(T)
+        self.alpha_bars = torch.cumprod(1-betas, dim=0).to(device)
 
     def time_embedding(self, N:int, idx) -> Tuple[Tensor, Tensor]:
         """
-        node_attr에 추가할 time embedding을 원하는 차원 크기(N)에 맞게 만드는 함수
+        Appending the timestep to the node features so that the model can be aware of the diffusion step.
 
         Args:
-            N (int): time embedding dimension
-            idx (None or int): None for training, int for sampling
+            N (int): timestep embedding dimension
+            idx (None or int): None for training, int for sampling => time step of sample
         """
-        pe = positional_encoding(self.T,N)
+        pe = self.positional_encoding(self.T,N)
 
         if idx == None:
-            B = self.graph.ptr.shape[0] - 1
+            B = self.G.ptr.shape[0] - 1
             
-            batch_resnum = [(self.graph.ptr[i] - self.graph.ptr[i - 1]) for i in range(1, B + 1)]
-
-            # t = 1.0 - torch.sigmoid(torch.randn(B, device=self.device) * 1.2 - 1.2)
-            # idx = (t * self.T).long().clamp(max=len(self.alpha_bars_xyz) - 1)
-            idx = torch.randint(0, len(self.alpha_bars_xyz), (B,), device=self.device)
-
-            # residue 수에 맞춰 index 확장
+            batch_resnum = [(self.G.ptr[i] - self.G.ptr[i - 1]) for i in range(1, B + 1)]
+            idx = torch.randint(0, len(self.alpha_bars), (B,), device=self.device)
             idxs = torch.cat([i.repeat(n) for i, n in zip(idx, batch_resnum)]).tolist()
 
-            used_alpha_bars_xyz = self.alpha_bars_xyz[idxs].unsqueeze(1)
-            base = pe[idxs].to(self.device)
+            used_alpha_bars = self.alpha_bars[idxs].unsqueeze(1)
+            t_embed = pe[idxs].to(self.device)
             
-            return base, used_alpha_bars_xyz, idxs
+            return t_embed, used_alpha_bars
         
         else:
-            base = pe[idx].to(self.device)
-            base = torch.tile(base, (self.graph.node_xyz.shape[0],1))
+            t_embed = pe[idx].to(self.device)
+            t_embed = torch.tile(t_embed, (self.G.node_xyz.shape[0],1))
             
-            return base
-
+            return t_embed
         
-    def forward_process(self, used_alpha_bars_xyz:Tensor, idx:List) -> Tuple[Tensor, Tensor]:
-        """
-        noise를 scheduling에 맞게 더하는 함수 (batch 마다 다르게)
-
-        Args:
-            x (Tensor): noise가 추가되기 전 원본
-            used_alpha_bars (Tensor): idx에 맞는 alpha bar
-        """
-
-        G = self.graph 
-        x = G.node_xyz[idx]
-
-        batch = G.batch[idx] 
-
-        # noise 부분
-        epsilon1 = torch.randn_like(x)
-        com = torch.zeros(batch.max()+1, 3, device=epsilon1.device)
-        com = com.index_add(0, batch, epsilon1) / torch.bincount(batch).unsqueeze(1)
-        epsilon1 = epsilon1 - com[batch]
-
-        # used_alpha_bars_xyz = used_alpha_bars_xyz[G.target_idx]
-
-        # noise낀 x
-        x_tilde = torch.sqrt(used_alpha_bars_xyz[G.pepidx])*x + torch.sqrt(1-used_alpha_bars_xyz[G.pepidx])*epsilon1
         
-        return x_tilde, used_alpha_bars_xyz, epsilon1
-    
-    def forward_process_ep(self, used_alpha_bars_xyz, idx): 
+    def forward_process(self, used_alpha_bars:Tensor) -> Tuple[Tensor, Tensor]:
 
-        G = self.graph 
-        x = G.node_xyz
+        x = self.G.node_xyz[self.G.pepidx]
+
+        batch = self.G.batch[self.G.pepidx] 
 
         epsilon = torch.randn_like(x)
-        epsilon -= torch.mean(epsilon[idx], dim=0, keepdim=True)
+        com = torch.zeros(batch.max()+1, 3, device=epsilon.device)
+        com = com.index_add(0, batch, epsilon) / torch.bincount(batch).unsqueeze(1)
+        epsilon = epsilon - com[batch]
 
-        x_tilde = torch.sqrt(used_alpha_bars_xyz)*x + torch.sqrt(1-used_alpha_bars_xyz)*epsilon
-        x_tilde -= torch.mean(x_tilde[idx], dim=0, keepdim=True) 
-
-        return x_tilde[idx], epsilon[idx]
-
+        x_tilde = torch.sqrt(used_alpha_bars[self.G.pepidx])*x + torch.sqrt(1-used_alpha_bars[self.G.pepidx])*epsilon
+        
+        return x_tilde
     
-    def reverse_process_on_x(self, x:Tensor, x0:Tensor, t:int) -> Tensor:
-        """
-        noise가 낀 x에서 noise를 한 step 벗겨내는 함수
-
-        Args:
-            x (Tensor): 노이즈가 낀 xyz coordinate
-            pred_ep (Tensor): model(EGNN)으로 예측한 x에서의 noise
-        """
+    def reverse_process(self, x:Tensor, x0:Tensor, t:int) -> Tensor:
 
         noise1 = torch.randn_like(x)
         noise1 = noise1 - torch.mean(noise1, dim=0, keepdim=True)
@@ -139,46 +89,28 @@ class Diffusion:
         #     noise = torch.randn_like(x)
         #     noise = noise - torch.mean(noise, dim=0)
         #     return mean + torch.sqrt(var) * noise
+
+
+    def positional_encoding(self, seq_len, d_model):
+
+        position = np.arange(seq_len)[:, np.newaxis]  
+        div_term = np.exp(np.arange(0, d_model, 2) * -(np.log(10000.0) / d_model))  
+        
+        pe = np.zeros((seq_len, d_model))
+        pe[:, 0::2] = np.sin(position * div_term)  
+        pe[:, 1::2] = np.cos(position * div_term)  
+        pe = torch.tensor(pe, dtype=torch.float)
+        
+        return pe
     
-    def reverse_process_ep(self, x, pred_ep, t): 
-        # pred_ep = pred_ep - torch.mean(pred_ep[self.pepidx], dim=0)
+    
+    def cos_scheduling(self, timesteps:int, s:float=0.008) -> Tensor:
 
-        noise = torch.randn_like(x)
-        noise -= torch.mean(noise, dim=0, keepdim=True)
-
-        mean = (x - (1-self.alphas[t])*(pred_ep[self.pepidx])/torch.sqrt(1-self.alpha_bars_xyz[t]))/torch.sqrt(self.alphas[t])
-        if t == 0:
-            var = torch.zeros_like(mean)
-        else:
-            var = (1-self.alpha_bars_xyz[t-1])*self.betas[t]/(1-self.alpha_bars_xyz[t])
+        steps = timesteps + 1
+        x = torch.linspace(0, timesteps, steps)
+        alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
+        alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+        betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
         
-        x_t1 = mean + torch.sqrt(var)*noise
-        x_t1 -= torch.mean(x_t1,dim=0,keepdim=True)
-
-        return x_t1
-
-        # alpha_t = self.alphas[t]
-        # beta_t = self.betas[t]
-        # alpha_bar_t = self.alpha_bars_xyz[t]
-        # alpha_bar_tm1 = self.alpha_bars_xyz[t - 1] if t > 0 else torch.tensor(1.0, device=x.device)
-
-        # # 1. x0 reconstruction
-        # x0_hat = (x - torch.sqrt(1 - alpha_bar_t) * pred_ep[self.pepidx]) / torch.sqrt(alpha_bar_t)
-
-        # # 2. posterior mean
-        # coef1 = (torch.sqrt(alpha_bar_tm1) * beta_t) / (1 - alpha_bar_t)
-        # coef2 = (torch.sqrt(alpha_t) * (1 - alpha_bar_tm1)) / (1 - alpha_bar_t)
-        # mean = coef1 * x0_hat + coef2 * x
-
-        # # 3. variance
-        # if t == 0:
-        #     return mean  # deterministic at final step
-        # else:
-        #     var = ((1 - alpha_bar_tm1) / (1 - alpha_bar_t)) * beta_t
-        #     noise = torch.randn_like(x)
-        #     noise = noise - torch.mean(noise, dim=0)
-        #     return mean + torch.sqrt(var) * noise
-
-
-        
+        return torch.clip(betas, 0.0001, 0.9999)
     
