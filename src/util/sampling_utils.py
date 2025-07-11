@@ -149,7 +149,7 @@ class sampling_code:
                 elif atom_idx == 1:
                     f.write(f"ATOM  {i+1:5d}  H   UNK {chainID}{int(seq_idx):4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           H\n")
             f.write("ENDMDL\n")
-
+            
 
 def get_coarse_length(x0):
 
