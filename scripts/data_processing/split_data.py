@@ -1,6 +1,7 @@
 import random
 from collections import defaultdict
 from pathlib import Path
+import shutil
 
 tsv_path = Path("/scratch/jsi0613/CG_data/fastas/chainA/mmseq/chainA_clu.tsv")
 seed = 42
@@ -42,18 +43,15 @@ with open(tsv_path, 'r') as f:
     test_set  = collect_members(test_clusters)
 
 # 저장
-pdb_path = Path("/scratch/jsi0613/CG_data/pdbs")
-for pdb in pdb_path.iterdir():
-    pdbID = pdb.stem
+pkl_path = Path("/scratch/jsi0613/CG_data/pickles")
+for pkl in pkl_path.iterdir():
+    pdbID = pkl.stem
     if pdbID in train_set: 
-        # shutil.move(pdb, pdb_path.joinpath("trainlist"))
-        continue
+        shutil.move(pkl, pkl_path.joinpath("trainlist"))
     elif pdbID in valid_set:
-        # shutil.move(pdb, pdb_path.joinpath("validlist"))
-        continue
+        shutil.move(pkl, pkl_path.joinpath("validlist"))
     elif pdbID in test_set: 
-        # shutil.move(pdb, pdb_path.joinpath("testlist"))
-        continue
+        shutil.move(pkl, pkl_path.joinpath("testlist"))
     else: 
         print("ERROR!!!!!!!!!!!")
         print(pdbID)

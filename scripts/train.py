@@ -1,5 +1,6 @@
 import numpy as np
-import torch, sys, os, pickle, time, copy
+import torch, sys, os, pickle, time, yaml
+from pathlib import Path
 from torch.utils import data
 src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'))
 sys.path.append(src_dir)
@@ -14,39 +15,23 @@ from util.lr_scheduler import *
 
 def main():
 
-    model_params = {
-                'in_node_nf': 11,
-                'hidden_nf': 160,
-                'out_node_nf': 11,
-                'in_edge_nf': 4,
-                'device': torch.device('cuda'),
-                'n_layers': 8
-                }
-
-    loader_params = {
-    'shuffle': True,
-    'num_workers': 5,
-    'pin_memory': True,
-    'collate_fn': collate,
-    'batch_size': 25,
-    'pin_memory': False}
-    
-    # datasets 
+    # Load params from config
     args = set_arguments()
-
-    start_time = time.time()
-    with open(args.graph_storage, 'rb') as f: 
-        graph_list = pickle.load(f)
-    end_time = time.time()
-
-    print('Data is Loaded, Time : ', int(end_time - start_time)) 
-    train_list = graph_list[:int(len(graph_list)*0.8)]
-    valid_list = graph_list[int(len(graph_list)*0.8):]
+    config_file = args.project_path + "configs/" + args.model_name  + ".yaml"
+    with open(config_file, "r") as f: 
+        config = yaml.safe_load(f)
+    loader_params = config["loader_params"]
+    loader_params["collate_fn"] = collate 
+    model_params = config["model_params"]
+    model_params["device"] = args.device 
+    
+    train_dir = Path(args.pkl_path).joinpath("trainlist")
+    valid_dir = Path(args.pkl_path).joinpath("validlist")
     
     # dataloader
-    train_set = DataSet(train_list)
+    train_set = DataSet(train_dir)
     train_loader = data.DataLoader(train_set, worker_init_fn=lambda _: np.random.seed(), **loader_params)
-    valid_set = DataSet(valid_list)
+    valid_set = DataSet(valid_dir)
     valid_loader = data.DataLoader(valid_set, worker_init_fn=lambda _: np.random.seed(), **loader_params)
     
     model, optimizer, start_epoch, train_loss, valid_loss = load_model(EGNN, model_params, args=set_arguments())
@@ -57,7 +42,6 @@ def main():
         # training
         start_time = time.time()
         temp_loss = run_an_epoch(model,optimizer,train_loader,noiser,True,args=set_arguments())
-        
         for key in temp_loss:
             train_loss[key].append(temp_loss[key])
         # validation

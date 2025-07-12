@@ -66,7 +66,7 @@ def run_an_epoch(model,optimizer,loader,noiser,train:bool,args) -> List:
         
         snr_weight = torch.clamp(used_alpha_bars / (1 - used_alpha_bars + 1e-7), max=5.0) 
 
-        original_dist_value = pad_xyz_by_idx_condition(xyz, G.batch, G.target_idx2, torch.sqrt(snr_weight))
+        original_dist_value = pad_xyz_by_idx_condition(xyz, G.batch, G.pepidx2, torch.sqrt(snr_weight))
 
         G.node_xyz[pepidx] = x_tilde
         G = dist_edges(G)
@@ -76,13 +76,14 @@ def run_an_epoch(model,optimizer,loader,noiser,train:bool,args) -> List:
 
             output_xyz = xyz.clone() 
             output_xyz[G.pepidx] = output[G.pepidx]
-            output_dist_value = pad_xyz_by_idx_condition(output_xyz, G.batch, G.target_idx2, torch.sqrt(snr_weight))
+            output_dist_value = pad_xyz_by_idx_condition(output_xyz, G.batch, G.pepidx2, torch.sqrt(snr_weight))
 
             loss1 = torch.mean(F.mse_loss(output[pepidx], xyz_label, reduction='none') * snr_weight[pepidx])
             loss2 = F.mse_loss(original_dist_value, output_dist_value)
 
             loss = loss1 + loss2
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
         else:
@@ -91,7 +92,7 @@ def run_an_epoch(model,optimizer,loader,noiser,train:bool,args) -> List:
 
                 output_xyz = xyz.clone() 
                 output_xyz[G.pepidx] = output[G.pepidx]
-                output_dist_value = pad_xyz_by_idx_condition(output_xyz, G.batch, G.target_idx2, torch.sqrt(snr_weight))
+                output_dist_value = pad_xyz_by_idx_condition(output_xyz, G.batch, G.pepidx2, torch.sqrt(snr_weight))
 
                 loss1 = torch.mean(F.mse_loss(output[pepidx], xyz_label, reduction='none') * snr_weight[pepidx])
                 loss2 = F.mse_loss(original_dist_value, output_dist_value)
@@ -106,7 +107,7 @@ def run_an_epoch(model,optimizer,loader,noiser,train:bool,args) -> List:
 
 
 def save_model(epoch:int, model, optimizer, train_loss, valid_loss, args) -> None:
-    "
+    
     # Update the best model if necessary:
     if np.min([np.mean(vl) for vl in valid_loss["total"]]) == np.mean(valid_loss["total"][-1]):
         torch.save({
