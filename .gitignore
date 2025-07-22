@@ -10,6 +10,5 @@ scripts/evaluation/
 scripts/sample.py/
 
 # src 
-src/arguments.py
 src/lr_scheduler.py 
 
