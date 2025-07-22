@@ -1,0 +1,15 @@
+submit/
+*.toml
+*__pycache__
+
+# scripts
+scripts/config.py
+scripts/practice.py
+scripts/data_processing/
+scripts/evaluation/
+scripts/sample.py/
+
+# src 
+src/arguments.py
+src/lr_scheduler.py 
+

@@ -10,43 +10,32 @@ src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'))
 sys.path.append(src_dir)
 from util.sampling_utils import *
 from util.diffusion import Diffusion
-from util.arguments import set_arguments
+from arguments import set_arguments
 from util.pdb_parsing import *
-from dataset import collate
 from util.utils import *
-
+import shutil
+import yaml
 
 
 args = set_arguments()
-# model_params = {
-#                 'in_node_nf': 11,
-#                 'hidden_nf': 160,
-#                 'out_node_nf': 11,
-#                 'in_edge_nf': 4,
-#                 'device': torch.device('cuda'),
-#                 'n_layers': 8
-#                 }
-model_params = {
-                'in_node_nf': 11,
-                'hidden_nf': 120,
-                'out_node_nf': 11,
-                'in_edge_nf': 4,
-                'device': torch.device('cuda'),
-                'n_layers': 12
-                }
-print(model_params)
-    
+
+config_path = args.project_path + "configs/"
+model_name = args.model_name 
+with open(config_path + model_name + '.yaml', 'r') as f: 
+    config = yaml.load(f, Loader=yaml.FullLoader)
+model_params = config["model_params"]
+model_params["device"] = args.device 
 
 args = set_arguments()
 path = '/home/jsi0613/projects/ddpm/data/refined_peplen_8-18_interaction50/'
+# path = '/scratch/jsi0613/CG_data/pdbs/'
 
-pdbnum = os.listdir(path)[-3]
+pdbnum = os.listdir(path)[-101]
 print(pdbnum)
+shutil.copy(path+pdbnum, args.sample_path+pdbnum)
 
-
-sampling = sampling_code(args, model_params, path, pdbnum, 'make_graph3') 
-print("original PDB binder length : ", sampling.to_graph.peplen)
-x_t1 = sampling.sample_pdb()
+sampling = sampling_code(args, model_params, path) 
+x_t1 = sampling.sample_pdb(pdbnum)
 
 
 CACAx0, CACBx0 = get_coarse_length(x_t1)

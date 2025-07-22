@@ -14,7 +14,7 @@ def get_interacting_residues(pdb_path, binder_chain_id, cutoff=4.0):
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure("complex", pdb_path)
     model = structure[0]
-
+    
     # chain 분리
     binder_chain = model[binder_chain_id]
     receptor_atoms = []

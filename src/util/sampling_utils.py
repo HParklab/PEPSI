@@ -6,10 +6,10 @@ import os
 from util.training_utils import dist_edges
 from util.pdb_parsing import *
 from util.diffusion import Diffusion
-from models.egnn_jsi import EGNN
+from models.egnn import EGNN
 
 
-def load_best_model(model_class, model_params:Dict, args, message=None):
+def load_best_model(model_class:EGNN, model_params:Dict, args, message=None):
 
     model_name = args.model_name
     model_path = args.model_path
@@ -49,8 +49,9 @@ class sampling_code:
             pdb = self.pdb_path + pdbnum
 
         to_graph = coarse_graph_maker(pdb)
-        G, com = to_graph.make_graph(25.0)
+        G, com = to_graph.make_graph(30.0)
         self.to_graph = to_graph
+        print(f'Peptide Length : {to_graph.peplen}')
 
         xyz = G.node_xyz.clone()
         ep = torch.randn_like(xyz[G.pepidx])
@@ -64,11 +65,10 @@ class sampling_code:
 
     def sample_pdb(self, pdbnum, traj=True, sample_pdb=None):
 
-        G,_ = self.preset(pdbnum)
+        G,com = self.preset(pdbnum)
         model = load_best_model(EGNN, self.model_params, self.args)
 
-        G = self.G
-        ddpm = Diffusion(self.args.device, self.args.timestep, self.G)
+        ddpm = Diffusion(self.args.device, self.args.timestep, G)
         
         for t in reversed(range(self.args.timestep)): 
 
@@ -94,13 +94,13 @@ class sampling_code:
 
             atom_types = torch.argmax(G.node_attr[G.pepidx, 5:7], dim=1)
             
-            if traj:
-                self.sample2pdb_traj(self.args.sample_path, "sample_traj.pdb", atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx, self.args.timestep-t)
+            # if traj:
+            #     self.sample2pdb_traj(self.args.sample_path, "sample_traj.pdb", atom_types, G.seqidx[G.pepidx], x_t1, com, G.pepidx, self.args.timestep-t)
             if t == 0:
                 if sample_pdb == None:
-                    self.sample2pdb(self.args.sample_path, 'sample.pdb', atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
+                    self.sample2pdb(self.args.sample_path, 'sample.pdb', atom_types, G.seqidx[G.pepidx], x_t1, com, G.pepidx)
                 else: 
-                    self.sample2pdb(self.args.sample_path, sample_pdb, atom_types, G.seqidx[G.pepidx], x_t1, self.com, G.pepidx)
+                    self.sample2pdb(self.args.sample_path, sample_pdb, atom_types, G.seqidx[G.pepidx], x_t1, com, G.pepidx)
 
         return x_t1
     

@@ -8,13 +8,12 @@ from dataset import DataSet, collate
 from arguments import set_arguments
 from util.diffusion import Diffusion
 from util.training_utils import *
-from models.egnn_jsi import EGNN
+from models.egnn import EGNN
 from util.lr_scheduler import *
 
 
-
 def main():
-
+    
     # Load params from config
     args = set_arguments()
     config_file = args.project_path + "configs/" + args.model_name  + ".yaml"

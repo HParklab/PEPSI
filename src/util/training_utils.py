@@ -79,7 +79,7 @@ def run_an_epoch(model,optimizer,loader,noiser,train:bool,args) -> List:
             output_dist_value = pad_xyz_by_idx_condition(output_xyz, G.batch, G.pepidx2, torch.sqrt(snr_weight))
 
             loss1 = torch.mean(F.mse_loss(output[pepidx], xyz_label, reduction='none') * snr_weight[pepidx])
-            loss2 = F.mse_loss(original_dist_value, output_dist_value)
+            loss2 = F.mse_loss(original_dist_value, output_dist_value)*0.2
 
             loss = loss1 + loss2
             loss.backward()
@@ -95,7 +95,7 @@ def run_an_epoch(model,optimizer,loader,noiser,train:bool,args) -> List:
                 output_dist_value = pad_xyz_by_idx_condition(output_xyz, G.batch, G.pepidx2, torch.sqrt(snr_weight))
 
                 loss1 = torch.mean(F.mse_loss(output[pepidx], xyz_label, reduction='none') * snr_weight[pepidx])
-                loss2 = F.mse_loss(original_dist_value, output_dist_value)
+                loss2 = F.mse_loss(original_dist_value, output_dist_value)*0.2
 
                 loss = loss1 + loss2
 

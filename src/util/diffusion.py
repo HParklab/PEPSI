@@ -1,12 +1,13 @@
 import torch
 from torch import Tensor
 from typing import Tuple, List
+from torch_geometric.data import Data
 import numpy as np
 import math
 
 class Diffusion:
 
-    def __init__(self, device:str, T:int, G) -> None:
+    def __init__(self, device:str, T:int, G:Data) -> None:
         
         self.device = device
         self.T = T
@@ -15,7 +16,7 @@ class Diffusion:
         betas = self.cos_scheduling(T)
         self.alpha_bars = torch.cumprod(1-betas, dim=0).to(device)
 
-    def time_embedding(self, N:int, idx) -> Tuple[Tensor, Tensor]:
+    def time_embedding(self, N:int, idx:int) -> Tuple[Tensor, Tensor] | Tensor:
         """
         Appending the timestep to the node features so that the model can be aware of the diffusion step.
 
@@ -44,7 +45,7 @@ class Diffusion:
             return t_embed
         
         
-    def forward_process(self, used_alpha_bars:Tensor) -> Tuple[Tensor, Tensor]:
+    def forward_process(self, used_alpha_bars:Tensor) -> Tensor:
 
         x = self.G.node_xyz[self.G.pepidx]
 
@@ -65,10 +66,10 @@ class Diffusion:
         noise1 = noise1 - torch.mean(noise1, dim=0, keepdim=True)
 
         if t != 0: 
-            x_t1 = x0*torch.sqrt(self.alpha_bars_xyz[t-1]) + noise1*torch.sqrt(1-self.alpha_bars_xyz[t-1])
+            x_t1 = x0*torch.sqrt(self.alpha_bars[t-1]) + noise1*torch.sqrt(1-self.alpha_bars[t-1])
 
         else: 
-            x_t1 = x0*torch.sqrt(self.alpha_bars_xyz[0]) + noise1*torch.sqrt(1-self.alpha_bars_xyz[0])
+            x_t1 = x0*torch.sqrt(self.alpha_bars[0]) + noise1*torch.sqrt(1-self.alpha_bars[0])
 
         return x_t1
 
@@ -90,8 +91,7 @@ class Diffusion:
         #     noise = noise - torch.mean(noise, dim=0)
         #     return mean + torch.sqrt(var) * noise
 
-
-    def positional_encoding(self, seq_len, d_model):
+    def positional_encoding(self, seq_len:int, d_model:int) -> Tensor:
 
         position = np.arange(seq_len)[:, np.newaxis]  
         div_term = np.exp(np.arange(0, d_model, 2) * -(np.log(10000.0) / d_model))  

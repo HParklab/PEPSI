@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from typing import Tuple, List
+from torch import Tensor
 from torch_geometric.data import Data
 from itertools import groupby
 from collections import defaultdict
@@ -22,7 +23,7 @@ def calculate_virtual_cb(n: np.ndarray, ca: np.ndarray, c: np.ndarray) -> np.nda
 
 class coarse_graph_maker: 
 
-    def __init__(self, filepath): 
+    def __init__(self, filepath:str) -> None: 
         self.filepath = filepath 
         self.atom_type_map = {'N': 0, 'CA': 1, 'C': 2, 'O': 3, 'CB': 4, 'sN': 5, 'sC': 6, 'sO':7, 'S': 8, 'H': 9}
         self.aa_type_map = {
@@ -67,7 +68,7 @@ class coarse_graph_maker:
 
         self.xyz, self.atmtp, self.seqsep, self.res, self.pepidx, self.peplen = self.parse_pdb()
 
-    def parse_pdb(self):
+    def parse_pdb(self) -> Tuple[Tensor, Tensor, Tensor, Tensor, List, int]:
         parser = PDBParser(QUIET=True)
         structure = parser.get_structure('structure', self.filepath)
 
@@ -158,7 +159,7 @@ class coarse_graph_maker:
 
         return torch.tensor(xyz, dtype=torch.float32), torch.tensor(atmtp, dtype=torch.long), torch.tensor(seqsep, dtype=torch.long), torch.tensor(res, dtype=torch.long), pepidx, peplen
 
-    def make_graph(self, d_cut): 
+    def make_graph(self, d_cut:float) -> Tuple[Data, Tensor]: 
 
         pep_mask = torch.zeros(len(self.atmtp), dtype=torch.bool)
         pep_mask[self.pepidx] = True
