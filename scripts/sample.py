@@ -29,11 +29,11 @@ args = set_arguments()
 path = '/home/jsi0613/projects/ddpm/data/refined_peplen_8-18_interaction50/'
 # path = '/scratch/jsi0613/CG_data/pdbs/'
 
-pdbnum = os.listdir(path)[-9]
+pdbnum = os.listdir(path)[-8]
 print(pdbnum)
 shutil.copy(path+pdbnum, args.sample_path+pdbnum)
 
-sampling = sampling_code(args, model_params, path) 
+sampling = sampling_code(model_params, args.model_name, args.model_path, args.device, args.timestep, args.t_dim, path, args.sample_path) 
 x_t1 = sampling.sample_pdb(pdbnum)
 
 
