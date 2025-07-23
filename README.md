@@ -9,8 +9,7 @@ A Generalizable Hierarchical All-Atom Peptide binder generative model
 
 ## Installation
 ```bash
-# create conda environment
-conda create --name PEPSI python=3.11
+git clone https://github.com/HParklab/PEPSI.git
+cd PEPSI
+conda env create -f environment.yml
 conda activate PEPSI
-conda install conda-forge::cudatoolkit=12.1
-conda install nvidia/label/cuda-12.1.105::cuda
