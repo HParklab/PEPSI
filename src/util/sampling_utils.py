@@ -26,7 +26,7 @@ def load_best_model(model_class:Type[nn.Module], model_params:Dict, model_name:s
     """
     model = model_class( **model_params )
     
-    if os.path.exists(model_path+model_name+'/model.pkl'):
+    if os.path.exists(model_path+model_name+'/best.pkl'):
         checkpoint = torch.load(model_path+model_name+'/best.pkl',map_location=device) # Load Best checkpoint
         epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['model_state_dict'],strict=False)
@@ -102,7 +102,7 @@ class sampling_code:
 
         return G, com
 
-    def sample_pdb(self, pdbnum:str|int, traj:bool=False, sample_pdb:str=None) -> Tensor:
+    def sample_pdb(self, pdbnum:str|int, traj:bool=True, sample_pdb:str=None) -> Tensor:
         """
         Generate a peptide structure via reverse diffusion and optionally save trajectory or final PDB.
 
