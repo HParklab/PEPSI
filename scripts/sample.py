@@ -8,6 +8,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'))
 sys.path.append(src_dir)
+from models.egnn import EGNN
 from util.sampling_utils import *
 from util.diffusion import Diffusion
 from arguments import set_arguments
@@ -33,7 +34,7 @@ pdbnum = os.listdir(path)[-8]
 print(pdbnum)
 shutil.copy(path+pdbnum, args.sample_path+pdbnum)
 
-sampling = sampling_code(model_params, args.model_name, args.model_path, args.device, args.timestep, args.t_dim, path, args.sample_path) 
+sampling = sampling_code(EGNN, model_params, args.model_name, args.model_path, args.device, args.timestep, args.t_dim, path, args.sample_path) 
 x_t1 = sampling.sample_pdb(pdbnum)
 
 

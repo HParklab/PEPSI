@@ -4,7 +4,6 @@ import torch.nn as nn
 from util.training_utils import dist_edges
 from util.pdb_parsing import coarse_graph_maker
 from util.diffusion import Diffusion
-from models.egnn import EGNN
 from torch_geometric.data import Data
 from Bio.PDB import PDBParser
 from torch import Tensor
@@ -43,7 +42,7 @@ def load_best_model(model_class:Type[nn.Module], model_params:Dict, model_name:s
 
 class sampling_code: 
 
-    def __init__(self, model_params:Dict, model_name:str, model_path:str, device:str, timestep:int, t_dim:int, pdb_path:str, sample_path:str) -> None:
+    def __init__(self, model_class:Type[nn.Module], model_params:Dict, model_name:str, model_path:str, device:str, timestep:int, t_dim:int, pdb_path:str, sample_path:str) -> None:
         """
         Initialize the model wrapper with configuration parameters.
 
@@ -57,6 +56,7 @@ class sampling_code:
             pdb_path (str): Path to the input PDB file or directory.
             sample_path (str): Directory where generated samples will be saved.
         """
+        self.model_class = model_class
         self.model_params = model_params
         self.model_name = model_name 
         self.model_path = model_path 
@@ -115,7 +115,7 @@ class sampling_code:
             Tensor: Final denoised peptide coordinates of shape (N_peptide_atoms, 3)
         """
         G, com = self.preset(pdbnum)
-        model = load_best_model(EGNN, self.model_params, self.model_name, self.model_path, self.device)
+        model = load_best_model(self.model_class, self.model_params, self.model_name, self.model_path, self.device)
         ddpm = Diffusion(self.device, self.timestep, G)
         
         for t in reversed(range(self.timestep)): # Reverse-Time sampling loop
