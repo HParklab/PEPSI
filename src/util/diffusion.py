@@ -14,6 +14,8 @@ class Diffusion:
         self.G = G.to(device)
 
         betas = self.cos_scheduling(T)
+        self.betas = betas
+        self.alphas = 1-betas
         self.alpha_bars = torch.cumprod(1-betas, dim=0).to(device)
 
     def time_embedding(self, N:int, idx:int) -> Tuple[Tensor, Tensor] | Tensor:
@@ -62,34 +64,23 @@ class Diffusion:
     
     def reverse_process(self, x:Tensor, x0:Tensor, t:int) -> Tensor:
 
-        noise1 = torch.randn_like(x)
-        noise1 = noise1 - torch.mean(noise1, dim=0, keepdim=True)
+        beta_t = self.betas[t]
+        alpha_t = self.alphas[t]
+        alpha_bar_t = self.alpha_bars[t]
+        alpha_bar_tm1 = self.alpha_bars[t - 1] if t > 0 else torch.tensor(1.0, device=x.device)
 
-        if t != 0: 
-            x_t1 = x0*torch.sqrt(self.alpha_bars[t-1]) + noise1*torch.sqrt(1-self.alpha_bars[t-1])
+        coef_x0 = (torch.sqrt(alpha_bar_tm1) * beta_t) / (1 - alpha_bar_t)
+        coef_xt = (torch.sqrt(alpha_t) * (1 - alpha_bar_tm1)) / (1 - alpha_bar_t)
 
-        else: 
-            x_t1 = x0*torch.sqrt(self.alpha_bars[0]) + noise1*torch.sqrt(1-self.alpha_bars[0])
+        mean = coef_x0 * x0 + coef_xt * x
 
-        return x_t1
-
-        # beta_t = self.betas[t]
-        # alpha_t = self.alphas[t]
-        # alpha_bar_t = self.alpha_bars_xyz[t]
-        # alpha_bar_tm1 = self.alpha_bars_xyz[t - 1] if t > 0 else torch.tensor(1.0, device=x.device)
-
-        # coef_x0 = (torch.sqrt(alpha_bar_tm1) * beta_t) / (1 - alpha_bar_t)
-        # coef_xt = (torch.sqrt(alpha_t) * (1 - alpha_bar_tm1)) / (1 - alpha_bar_t)
-
-        # mean = coef_x0 * x0 + coef_xt * x
-
-        # if t == 0:
-        #     return mean  # deterministic
-        # else:
-        #     var = ((1 - alpha_bar_tm1) / (1 - alpha_bar_t)) * beta_t
-        #     noise = torch.randn_like(x)
-        #     noise = noise - torch.mean(noise, dim=0)
-        #     return mean + torch.sqrt(var) * noise
+        if t == 0:
+            return mean  # deterministic
+        else:
+            var = ((1 - alpha_bar_tm1) / (1 - alpha_bar_t)) * beta_t
+            noise = torch.randn_like(x)
+            noise = noise - torch.mean(noise, dim=0)
+            return mean + torch.sqrt(var) * noise
 
     def positional_encoding(self, seq_len:int, d_model:int) -> Tensor:
 

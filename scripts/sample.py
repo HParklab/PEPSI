@@ -12,7 +12,6 @@ from util.sampling_utils import *
 from util.diffusion import Diffusion
 from arguments import set_arguments
 from util.pdb_parsing import *
-from util.utils import *
 import shutil
 import yaml
 
@@ -30,7 +29,7 @@ args = set_arguments()
 path = '/home/jsi0613/projects/ddpm/data/refined_peplen_8-18_interaction50/'
 # path = '/scratch/jsi0613/CG_data/pdbs/'
 
-pdbnum = os.listdir(path)[-101]
+pdbnum = os.listdir(path)[-8]
 print(pdbnum)
 shutil.copy(path+pdbnum, args.sample_path+pdbnum)
 

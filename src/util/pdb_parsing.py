@@ -3,23 +3,9 @@ import torch
 from typing import Tuple, List
 from torch import Tensor
 from torch_geometric.data import Data
-from itertools import groupby
-from collections import defaultdict
 from Bio.PDB import PDBParser
 
-def calculate_virtual_cb(n: np.ndarray, ca: np.ndarray, c: np.ndarray) -> np.ndarray:
- 
-    v1 = n - ca 
-    v2 = c - ca  
-    
-    v1 = v1 / np.linalg.norm(v1)
-    v2 = v2 / np.linalg.norm(v2)
 
-    v3 = np.cross(v1, v2)
-    v3 = v3 / np.linalg.norm(v3)
-    
-    cb = ca + 1.54 * v3  
-    return np.round(cb, 3)
 
 class coarse_graph_maker: 
 
@@ -67,6 +53,20 @@ class coarse_graph_maker:
         }
 
         self.xyz, self.atmtp, self.seqsep, self.res, self.pepidx, self.peplen = self.parse_pdb()
+
+    def calculate_virtual_cb(self, n: np.ndarray, ca: np.ndarray, c: np.ndarray) -> np.ndarray:
+ 
+        v1 = n - ca 
+        v2 = c - ca  
+        
+        v1 = v1 / np.linalg.norm(v1)
+        v2 = v2 / np.linalg.norm(v2)
+
+        v3 = np.cross(v1, v2)
+        v3 = v3 / np.linalg.norm(v3)
+        
+        cb = ca + 1.54 * v3  
+        return np.round(cb, 3)
 
     def parse_pdb(self) -> Tuple[Tensor, Tensor, Tensor, Tensor, List, int]:
         parser = PDBParser(QUIET=True)
@@ -143,7 +143,7 @@ class coarse_graph_maker:
 
                     # 만약 CB가 없으면 virtual CB 추가
                     if not has_cb and all(key in atom_coords for key in ['N', 'CA', 'C']):
-                        virtual_cb = calculate_virtual_cb(atom_coords['N'], atom_coords['CA'], atom_coords['C'])
+                        virtual_cb = self.calculate_virtual_cb(atom_coords['N'], atom_coords['CA'], atom_coords['C'])
                         
                         xyz.append(list(virtual_cb))
                         atmtp.append(self.atom_type_map['CB'])  # CB index
@@ -235,84 +235,6 @@ class coarse_graph_maker:
         connection = connection[u,v]
         
         edge_attr = torch.cat([edge_attr,connection], dim=1)
-
-        """ Graph """
-        G = Data( 
-            nodes = nodes,
-            num_nodes = nodes.size(0),
-            node_attr = node_attr,
-            node_xyz = xyz, 
-            edge_index = edge_index, 
-            edge_attr = edge_attr, 
-            pepidx = pepidx,
-            seqidx = seqsep
-        )
-
-        return G, com
-    
-
-    def make_graph_seq(self, d_cut, resnum): 
-        
-        resnum = self.seqsep[self.pepidx].unique()[resnum].item()
-        resnum_mask = (self.seqsep == resnum)
-        
-        pep_mask = torch.zeros(len(self.atmtp), dtype=torch.bool)
-        pep_mask[self.pepidx] = True
-
-        binder_cond = resnum_mask & ((self.atmtp == 1) | (self.atmtp == 4))
-        non_binder_cond = (~pep_mask) & (self.atmtp == 1)
-        final_mask = binder_cond | non_binder_cond
-
-        xyz = self.xyz[final_mask]
-        atmtp = self.atmtp[final_mask]
-        seqsep = self.seqsep[final_mask]
-        res = self.res[final_mask]
-        survivors = final_mask.nonzero(as_tuple=False).squeeze()
-
-        new_pepidx_mask = torch.isin(survivors, torch.tensor(self.pepidx))
-        pepidx = new_pepidx_mask.nonzero(as_tuple=False).squeeze()
-
-        com = xyz[pepidx[1]]
-        xyz = xyz - com 
-
-        dist = torch.norm(xyz, dim=1)
-        dist_mask = dist <= d_cut 
-
-        dist_mask[pepidx] = True 
-        
-        xyz = xyz[dist_mask]
-        atmtp = atmtp[dist_mask]
-        atmtp = (atmtp == 4).long()
-        seqsep = seqsep[dist_mask]
-        res = res[dist_mask]
-
-        survivors = dist_mask.nonzero(as_tuple=False).squeeze()
-        pepidx = torch.isin(survivors, pepidx).nonzero(as_tuple=False).squeeze()
-
-        """ Nodes """
-        is_pep = torch.zeros(xyz.size(0),1)
-        is_pep[pepidx] = 1.0
-
-        res_type = torch.eye(20)[res]
-        atom_type = torch.eye(2)[atmtp]
-        node_attr = torch.cat([is_pep, res_type, atom_type], dim=1)
-        nodes = torch.arange(len(node_attr))
-        
-        """ edges """
-        edge_set = set()
-        for p in pepidx.tolist(): 
-            for i in range(xyz.size(0)): 
-                if i != p: 
-                    edge_set.add((p,i))
-                    edge_set.add((i,p))
-        edge_index = torch.tensor(list(edge_set), dtype=torch.long).t().contiguous()
-        
-        seqsep_diff = torch.tanh(0.01*seqsep[:,None] - seqsep[None,:])
-        dist_diff = torch.cdist(xyz,xyz,p=2)
-        u,v = edge_index
-        edge_attr = torch.cat([seqsep_diff[u,v].unsqueeze(1), dist_diff[u,v].unsqueeze(1)], dim=1)
-
-        # edge_attr = torch.cat([edge_attr], dim=1)
 
         """ Graph """
         G = Data( 
