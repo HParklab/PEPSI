@@ -29,7 +29,7 @@ args = set_arguments()
 path = '/home/jsi0613/projects/ddpm/data/refined_peplen_8-18_interaction50/'
 # path = '/scratch/jsi0613/CG_data/pdbs/'
 
-pdbnum = os.listdir(path)[-8]
+pdbnum = os.listdir(path)[-9]
 print(pdbnum)
 shutil.copy(path+pdbnum, args.sample_path+pdbnum)
 
