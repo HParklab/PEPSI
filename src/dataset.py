@@ -1,12 +1,9 @@
 import torch
-from torch_geometric.data import Batch, Data
-from util.pdb_parsing import *
 import pickle
-from tqdm import tqdm
-from pathlib import Path
 import time
-from torch import Tensor
-from typing import List, Dict, Tuple
+from torch_geometric.data import Batch, Data
+from pathlib import Path
+from typing import List
 
 
 class DataSet(torch.utils.data.Dataset):
