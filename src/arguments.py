@@ -16,7 +16,7 @@ def set_arguments():
     parser.add_argument('--model_path', type=str, default='/home/jsi0613/projects/ddpm_coarse/weights/')
     parser.add_argument('--MAXEPOCHS', type=int, default=1000)
     parser.add_argument('--timestep', type=int, default=300)
-    parser.add_argument('--model_name', type=str, default='CG_300')
+    parser.add_argument('--model_name', type=str, default='test')
 
     # sampling
     parser.add_argument('-sample_path', type=str, default='/home/jsi0613/projects/ddpm_coarse/data/samples/')

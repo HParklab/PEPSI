@@ -12,7 +12,7 @@ class DataSet(torch.utils.data.Dataset):
     def __init__(self, data_path) -> None:
         self.fs = []
         start_time = time.time()
-        for pkl in data_path.iterdir(): 
+        for pkl in list(data_path.iterdir())[:30]: 
             with open(pkl, 'rb') as f: 
                 data = pickle.load(f)
                 self.fs.append(data)
