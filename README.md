@@ -13,8 +13,16 @@ git clone https://github.com/HParklab/PEPSI.git
 cd PEPSI
 conda env create -f environment.yml
 conda activate PEPSI
-'''
+```
 
 ## Usage
+### Unzip pretrained model
+```bash
+gzip -d params/Coarse-Grained/best.pkl.gz
+```
+### sample
+```bash
+python scripts/sample_pretrained.py --pdb_path {pdbfile path} --pdbnum {pdbfile} 
+```
 
 
