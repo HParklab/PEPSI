@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor
-from typing import Tuple, List
+from typing import Tuple
 from torch_geometric.data import Data
 import numpy as np
 import math
