@@ -131,7 +131,6 @@ class Diffusion:
         # Generate isotropic Gaussian noise
         epsilon = torch.randn_like(x)                   # ε ~ N(0, I)
 
-
         # Center the noise per graph to ensure translation invariance
         com = torch.zeros(batch.max() + 1, 3, device=epsilon.device)  # (num_graphs, 3)
         com = com.index_add(0, batch, epsilon) / torch.bincount(batch).unsqueeze(1)
