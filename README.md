@@ -13,3 +13,8 @@ git clone https://github.com/HParklab/PEPSI.git
 cd PEPSI
 conda env create -f environment.yml
 conda activate PEPSI
+'''
+
+## Usage
+
+
