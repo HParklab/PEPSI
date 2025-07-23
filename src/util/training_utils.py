@@ -1,13 +1,12 @@
 import torch
 import numpy as np
-from torch import Tensor
-from typing import List, Dict, Tuple, Type
 import os
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils import data
 from torch_geometric.data import Data
-
+from torch import Tensor
+from typing import List, Dict, Tuple, Type
 
 def load_model(
         model_class:Type[nn.Module], 
