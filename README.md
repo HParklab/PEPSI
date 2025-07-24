@@ -11,8 +11,16 @@ A Generalizable Hierarchical All-Atom Peptide binder generative model
 ```bash
 git clone https://github.com/HParklab/PEPSI.git
 cd PEPSI
-conda env create -f environment.yml
+
+# 1. 새 환경 만들기
+conda create -n PEPSI python=3.11 -y
 conda activate PEPSI
+
+# 2. PyTorch (CUDA 12.1) 설치 
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+
+# 4. 나머지 패키지 설치 (수정된 requirements.txt 기준)
+pip install -r requirements.txt
 ```
 
 ## Usage
