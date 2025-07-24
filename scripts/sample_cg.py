@@ -39,7 +39,7 @@ if __name__ == '__main__':
     # Copy input PDB to sample_path for record-keeping
     os.makedirs(sample_path, exist_ok=True)
     shutil.copy(os.path.join(args.pdb_path, args.pdbnum), os.path.join(sample_path, args.pdbnum))
-    print(model_name, model_path)
+
     # Initialize sampler
     sampler = sampling_code(
         EGNN, model_params,

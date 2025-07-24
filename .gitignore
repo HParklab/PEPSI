@@ -12,3 +12,6 @@ scripts/sample.py/
 # src 
 src/lr_scheduler.py 
 
+# params 
+params/
+
