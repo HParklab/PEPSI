@@ -9,7 +9,7 @@ from Bio.PDB import PDBParser
 
 class coarse_graph_maker: 
 
-    def __init__(self, filepath:str) -> None: 
+    def __init__(self, filepath:str, chain_ID:str='X') -> None: 
         """
         Initialize the class with input file and predefined atom/amino acid mappings.
 
@@ -26,6 +26,7 @@ class coarse_graph_maker:
         Returns:
             None
         """
+        self.chain_ID = chain_ID
         self.filepath = filepath # Path to the input structure file
         self.atom_type_map = {'N': 0, 'CA': 1, 'C': 2, 'O': 3, 'CB': 4, 'sN': 5, 'sC': 6, 'sO':7, 'S': 8, 'H': 9}
         self.aa_type_map = {
@@ -177,7 +178,7 @@ class coarse_graph_maker:
                         seqsep.append(seq_idx)
                         
                         # Mark Ppetide Atoms
-                        if chain.id == 'X':
+                        if chain.id == self.chain_ID:
                             pepidx.append(idx)
 
                         idx += 1 # Increase Global Atom index
@@ -190,7 +191,7 @@ class coarse_graph_maker:
                         atmtp.append(self.atom_type_map['CB'])  # CB index
                         seqsep.append(seq_idx)
                         res.append(res_idx)
-                        if chain.id == 'X':
+                        if chain.id == self.chain_ID:
                             pepidx.append(idx)
                         idx += 1
         

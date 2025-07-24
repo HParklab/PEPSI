@@ -1,4 +1,4 @@
-import torch, os, pickle, sys, shutil, yaml
+import torch, os, sys, shutil
 import numpy as np
 src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'))
 sys.path.append(src_dir)
@@ -11,6 +11,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run sampling with pretrained model")
     parser.add_argument('--pdb_path', type=str, required=True, help='Directory with input PDB files')
     parser.add_argument('--pdbnum', type=str, required=True, help='PDB file name to sample (e.g., 1abc.pdb)')
+    parser.add_argument('--chainID', type=str, required=True)
 
     return parser.parse_args()
 
@@ -53,7 +54,7 @@ if __name__ == '__main__':
     )
 
     # Run sampling
-    x_t1 = sampler.sample_pdb(args.pdbnum)
+    x_t1 = sampler.sample_pdb(args.pdbnum, args.chainID)
 
     # Optionally: print coarse distances
     CACAx0, CACBx0 = get_coarse_length(x_t1)

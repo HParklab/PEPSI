@@ -68,7 +68,7 @@ class sampling_code:
         self.pdb_path = pdb_path 
         self.sample_path = sample_path
 
-    def preset(self, pdbnum:str|int) -> Tuple[Data, Tensor]:
+    def preset(self, pdbnum:str|int, chain_ID:str='X') -> Tuple[Data, Tensor]:
         """
         Prepare a graph from a selected PDB file and initialize the peptide coordinates with noise.
 
@@ -88,7 +88,7 @@ class sampling_code:
         elif type(pdbnum) == str: 
             pdb = self.pdb_path + pdbnum
 
-        to_graph = coarse_graph_maker(pdb)
+        to_graph = coarse_graph_maker(pdb, chain_ID)
         G, com = to_graph.make_graph(30.0)
         print(f'Peptide Length : {to_graph.peplen}')
 
@@ -102,7 +102,7 @@ class sampling_code:
 
         return G, com
 
-    def sample_pdb(self, pdbnum:str|int, traj:bool=True, sample_pdb:str=None) -> Tensor:
+    def sample_pdb(self, pdbnum:str|int, chain_ID:str='X', traj:bool=True, sample_pdb:str=None) -> Tensor:
         """
         Generate a peptide structure via reverse diffusion and optionally save trajectory or final PDB.
 
@@ -114,7 +114,7 @@ class sampling_code:
         Returns:
             Tensor: Final denoised peptide coordinates of shape (N_peptide_atoms, 3)
         """
-        G, com = self.preset(pdbnum)
+        G, com = self.preset(pdbnum, chain_ID)
         model = load_best_model(self.model_class, self.model_params, self.model_name, self.model_path, self.device)
         ddpm = Diffusion(self.device, self.timestep, G)
         
