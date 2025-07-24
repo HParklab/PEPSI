@@ -25,7 +25,7 @@ gzip -d params/Coarse-Grained/best.pkl.gz
 ```
 ### sample
 ```bash
-python scripts/sample_cg.py --pdb_path {pdbfile path} --pdbnum {pdbfile} 
+python scripts/sample_cg.py --pdb_path {pdbfile path} --pdbnum {pdbfile} --chainID {chainID}
 ```
 
 
