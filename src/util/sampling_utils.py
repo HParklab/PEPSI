@@ -27,7 +27,7 @@ def load_best_model(model_class:Type[nn.Module], model_params:Dict, model_name:s
     model = model_class( **model_params )
     
     if os.path.exists(model_path+model_name+'/best.pkl'):
-        checkpoint = torch.load(model_path+model_name+'/best.pkl',map_location=device) # Load Best checkpoint
+        checkpoint = torch.load(model_path + model_name + '/best.pkl', map_location=device, weights_only=False) # Load Best checkpoint
         epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['model_state_dict'],strict=False)
         if message == None:
@@ -119,7 +119,6 @@ class sampling_code:
         ddpm = Diffusion(self.device, self.timestep, G)
         
         for t in reversed(range(self.timestep)): # Reverse-Time sampling loop
-
             base = ddpm.time_embedding(self.t_dim, t) # Time embedding for current timestep
             G.node_attr = torch.cat([G.node_attr, base], dim=1)
 

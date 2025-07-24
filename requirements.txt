@@ -1,0 +1,5 @@
+Bio==1.8.0
+numpy==2.3.1
+PyYAML==6.0.2
+torch_geometric==2.6.1
+tqdm==4.67.1
